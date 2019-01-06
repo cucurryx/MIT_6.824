@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"mapreduce"
 	"os"
+	"strconv"
+	"strings"
+	"unicode"
 )
 
 //
@@ -15,6 +18,19 @@ import (
 //
 func mapF(filename string, contents string) []mapreduce.KeyValue {
 	// Your code here (Part II).
+	wordCnt := make(map[string]int)
+	splicFunc := func(c rune) bool {
+		return !unicode.IsLetter(c)
+	}
+	words := strings.FieldsFunc(contents, splicFunc)
+	for _, word := range words {
+		wordCnt[word]++
+	}
+	keyValuePairs := make([]mapreduce.KeyValue, len(wordCnt))
+	for word, cnt := range wordCnt {
+		keyValuePairs = append(keyValuePairs, mapreduce.KeyValue{Key:word, Value:strconv.Itoa(cnt)})
+	}
+	return keyValuePairs
 }
 
 //
@@ -24,6 +40,20 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 //
 func reduceF(key string, values []string) string {
 	// Your code here (Part II).
+
+	totalCnt := int64(0)
+	for _, x := range values {
+		//Notice. If the appearance count of key is empty string, function ParseInt may throw error
+		if x == "" {
+			continue
+		}
+		if cnt, err := strconv.ParseInt(x, 10, 64); err == nil {
+			totalCnt += cnt
+		} else {
+			panic(err)
+		}
+	}
+	return strconv.Itoa(int(totalCnt))
 }
 
 // Can be run in 3 ways:

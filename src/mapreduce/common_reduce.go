@@ -1,5 +1,26 @@
 package mapreduce
 
+import (
+	"encoding/json"
+	"io/ioutil"
+	"os"
+)
+
+type KeyValuePairs []KeyValue
+
+//for sort the KeyValue by key
+func (keyValuePairs KeyValuePairs) Len() int {
+	return len(keyValuePairs)
+}
+
+func (keyValuePairs KeyValuePairs) Swap(i, j int) {
+	keyValuePairs[i], keyValuePairs[j] = keyValuePairs[j], keyValuePairs[i]
+}
+
+func (keyValuePairs KeyValuePairs) Less(i, j int) bool {
+	return keyValuePairs[i].Key < keyValuePairs[j].Key
+}
+
 func doReduce(
 	jobName string, // the name of the whole MapReduce job
 	reduceTask int, // which reduce task this is
@@ -44,4 +65,44 @@ func doReduce(
 	//
 	// Your code here (Part I).
 	//
+	allKeyValuePairs := make([]KeyValue, 0)
+
+	for mapTask := 0; mapTask < nMap; mapTask++ {
+		currMapTaskReduceFilename := reduceName(jobName, mapTask, reduceTask)
+		currMapTaskOutput, err := ioutil.ReadFile(currMapTaskReduceFilename)
+		if err != nil {
+			panic(err)
+		}
+		currKeyValuePairs := make([]KeyValue, 0)
+		if err = json.Unmarshal(currMapTaskOutput, &currKeyValuePairs); err != nil {
+			panic(err)
+		}
+		for _, x := range currKeyValuePairs {
+			allKeyValuePairs = append(allKeyValuePairs, x)
+		}
+	}
+
+	//not need to sort. using a map is a better way
+	//sort.Sort(KeyValuePairs(allKeyValuePairs))
+	keyValuesMap := make(map[string][]string)
+	for _, keyValuePair := range allKeyValuePairs {
+		key, value := keyValuePair.Key, keyValuePair.Value
+		keyValuesMap[key] = append(keyValuesMap[key], value)
+	}
+
+	outputFile, err := os.Create(outFile)
+	if err != nil {
+		panic(err)
+	}
+
+	enc := json.NewEncoder(outputFile)
+	for key, value := range keyValuesMap {
+		if err := enc.Encode(KeyValue{key, reduceF(key, value)}); err != nil {
+			panic(err)
+		}
+	}
+
+	if err := outputFile.Close(); err != nil {
+		panic(err)
+	}
 }

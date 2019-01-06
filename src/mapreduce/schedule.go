@@ -1,14 +1,17 @@
 package mapreduce
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 //
 // schedule() starts and waits for all tasks in the given phase (mapPhase
 // or reducePhase). the mapFiles argument holds the names of the files that
 // are the inputs to the map phase, one per map task. nReduce is the
-// number of reduce tasks. the registerChan argument yields a stream
-// of registered workers; each item is the worker's RPC address,
-// suitable for passing to call(). registerChan will yield all
+//// number of reduce tasks. the registerChan argument yields a stream
+//// of registered workers; each item is the worker's RPC address,
+//// suitable for passing to call(). registerChan will yield all
 // existing registered workers (if any) and new ones as they register.
 //
 func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, registerChan chan string) {
@@ -30,5 +33,35 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	//
 	// Your code here (Part III, Part IV).
 	//
+
+	var wg sync.WaitGroup
+	for i := 0; i < ntasks; i += 1 {
+		doTaskArgs := DoTaskArgs{
+			JobName:       jobName,
+			File:          mapFiles[i],
+			Phase:         phase,
+			TaskNumber:    i,
+			NumOtherPhase: n_other}
+		wg.Add(1)
+		go func(doTaskArgs DoTaskArgs, registerChan chan string) {
+			worker := <-registerChan
+			for !call(worker, "Worker.DoTask", doTaskArgs, nil) {
+				//give it to another worker
+				//go func() {
+				//	registerChan <- worker
+				//}()
+				worker = <-registerChan
+			}
+
+			//NOTICE! in order to avoid being blocked, we must use a goroutine to
+			//push the worker back to that channel
+			go func() {
+				registerChan <- worker
+			}()
+			wg.Done()
+		}(doTaskArgs, registerChan)
+	}
+
+	wg.Wait()
 	fmt.Printf("Schedule: %v done\n", phase)
 }
